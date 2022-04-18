@@ -78,9 +78,6 @@ contract RingFarm is Ownable {
         require(amount <= stakingDetails[msg.sender].stakingBalance, "Cannot withdraw more than what is staked");
         require(!stakingDetails[msg.sender].withdrawRequested, "A withdrawal is already requested");
         initWithdraw(amount);
-        IERC20(allowedToken).transferFrom(address(this), msg.sender, amount);
-        stakingDetails[msg.sender].stakingBalance  -= amount;
-        totalStaked -= amount;
     }
 
     function initWithdraw(uint256 amount) private{
@@ -99,8 +96,9 @@ contract RingFarm is Ownable {
         if(andClaim){
             claimRewards(amount);
         }
-        require(IERC20(allowedToken).transfer(msg.sender,amount));
+        require(IERC20(allowedToken).transferFrom(address(this), msg.sender, amount));
         stakingDetails[msg.sender].stakingBalance -= amount;
+        totalStaked -= amount;
         stakingDetails[msg.sender].withdrawRequested = false;
     }
 
@@ -132,11 +130,14 @@ contract RingFarm is Ownable {
     function calculateRewards() private {
         address stakerAddress;
         uint256 stakerShare;
+        uint256 rewardsToAdd;
         for (uint i=0; i<stakers.length; i++) {
             stakerAddress = stakers[i];
             stakerShare = stakingDetails[stakerAddress].stakingBalance / totalStaked;
             //staking rewards of each user is increased by the staker's share x rewards per day x seconds passed since last update divided by seconds per day.
-            stakingDetails[stakerAddress].stakingRewards += stakerShare * rewardsPerDay * (block.timestamp - lastTimeStamp)/86400;
+            rewardsToAdd = stakerShare * rewardsPerDay * (block.timestamp - lastTimeStamp)/86400;
+            stakingDetails[stakerAddress].stakingRewards += rewardsToAdd;
+            totalPendingRewards += rewardsToAdd;
         }
     }
 
