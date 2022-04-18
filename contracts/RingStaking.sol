@@ -32,17 +32,12 @@ contract RingFarm is Ownable {
     uint256 rewardsBalance; // total amount of reward tokens
     uint256 public totalClaimed; // total amount of claimed rewards
     uint256 totalPendingRewards; // total amount of rewards to be distributed
-
+    uint256 withdrawDuration; // Amount of time to wait after requesting a withdrawal,
     uint256 private rewardsPerDay; // rewards per day
     uint256 public lastTimeStamp; // last timestamp on which rewards were updated
     address[] public stakers; // array of stakers addresses used to iterate over map
     // owner -> balance
     mapping(address => stakingInfo) stakingDetails;  // map containing the details of each user (check the struct)
-
-
-    constructor(address _dappTokenAddress) public { 
-        stakedToken = IERC20(_dappTokenAddress);
-    }
 
     // addRewards
     function addRewards(uint256 amount) public onlyOwner {
@@ -74,16 +69,41 @@ contract RingFarm is Ownable {
         totalStaked += amount;
     }
 
-    // unstakeTokens
-    function unstakeTokens(uint256 amount) public{
+    // withdraw or unstake Tokens
+    function withdrawTokens(uint256 amount) public{
         //require(token is Ring)
         require(!stakingPaused, "Staking is currently paused");
         require(amount > 0, "Amount cannot be 0");
-        require(amount <= stakingDetails[msg.sender].stakingBalance);
+        require(stakingDetails[msg.sender].stakingBalance > 0);
+        require(amount <= stakingDetails[msg.sender].stakingBalance, "Cannot withdraw more than what is staked");
+        require(!stakingDetails[msg.sender].withdrawRequested, "A withdrawal is already requested");
+        initWithdraw(amount);
         IERC20(allowedToken).transferFrom(address(this), msg.sender, amount);
         stakingDetails[msg.sender].stakingBalance  -= amount;
         totalStaked -= amount;
     }
+
+    function initWithdraw(uint256 amount) private{
+        require(amount <= stakingDetails[msg.sender].stakingBalance, "Cannot withdraw more than what is staked");
+        require(!stakingDetails[msg.sender].withdrawRequested, "A withdrawal is already requested");
+        stakingDetails[msg.sender].amountToWithdraw = amount;
+        stakingDetails[msg.sender].withdrawRequested = true;
+        stakingDetails[msg.sender].withdrawReleaseDate = block.timestamp + 2 weeks;
+    }
+
+    function finalizeWithdraw(uint256 amount, bool andClaim) public{
+        require(stakingDetails[msg.sender].stakingBalance > 0);
+        require(amount <= stakingDetails[msg.sender].stakingBalance, "Cannot withdraw more than what is staked");
+        require(stakingDetails[msg.sender].withdrawRequested, "A withdrawal is already requested");
+        require(block.timestamp > stakingDetails[msg.sender].withdrawReleaseDate, "You cannot withdraw yet");
+        if(andClaim){
+            claimRewards(amount);
+        }
+        require(IERC20(allowedToken).transfer(msg.sender,amount));
+        stakingDetails[msg.sender].stakingBalance -= amount;
+        stakingDetails[msg.sender].withdrawRequested = false;
+    }
+
 
     // get rewards per day
     function getRewardsPerDay() public view returns (uint256){
@@ -94,6 +114,16 @@ contract RingFarm is Ownable {
     function setRewardsPerDay(uint256 rewards) public onlyOwner{
         require(rewards >= 0);
         rewardsPerDay = rewards;
+    }
+
+    // get rewards per day
+    function getWithdrawalDuration() public view returns (uint256){
+        return withdrawDuration;
+    }
+
+    // set rewards per day
+    function setWithdrawalDuration(uint256 timeToWaitInDays) public onlyOwner{
+        withdrawDuration = timeToWaitInDays ;
     }
 
     // calculate rewards
@@ -112,6 +142,7 @@ contract RingFarm is Ownable {
     // claim rewards
     function claimRewards(uint256 amount) public {
         require(stakingDetails[msg.sender].stakerMarked); // require that the caller is a staker
+        require(stakingDetails[msg.sender].stakingRewards > 0); // require that the caller has rewards
         require(amount <= stakingDetails[msg.sender].stakingRewards);
         IERC20(rewardToken).transferFrom(address(this), msg.sender, amount);
         rewardsBalance -= amount;
