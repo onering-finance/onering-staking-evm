@@ -160,6 +160,19 @@ contract RingFarm is Ownable {
         allowedToken = token;
     }
 
+    function getAllowedToken() public view returns (address) {
+        return allowedToken;
+    }
+
+     // changeRewardToken
+    function changeRewardToken(address token) public onlyOwner {
+        rewardToken = token;
+    }
+
+    function getRewardToken() public view returns (address) {
+        return rewardToken;
+    }
+
     // pauseStaking
     function pauseStaking() public onlyOwner {
         require(!stakingPaused, "Staking is currently paused");
