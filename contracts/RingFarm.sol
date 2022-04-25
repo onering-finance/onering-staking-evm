@@ -127,18 +127,17 @@ contract RingFarm is Ownable {
 
     // calculate rewards
     //TO DO: Call this function at every block
-    function calculateRewards() private {
+    function calculateRewards() public onlyOwner {
         address stakerAddress;
-        uint256 stakerShare;
         uint256 rewardsToAdd;
         for (uint i=0; i<stakers.length; i++) {
             stakerAddress = stakers[i];
-            stakerShare = stakingDetails[stakerAddress].stakingBalance / totalStaked;
             //staking rewards of each user is increased by the staker's share x rewards per day x seconds passed since last update divided by seconds per day.
-            rewardsToAdd = stakerShare * rewardsPerDay * (block.timestamp - lastTimeStamp)/86400;
+            rewardsToAdd = stakingDetails[stakerAddress].stakingBalance * rewardsPerDay * (block.timestamp - lastTimeStamp)/(86400 * totalStaked);
             stakingDetails[stakerAddress].stakingRewards += rewardsToAdd;
             totalPendingRewards += rewardsToAdd;
         }
+        lastTimeStamp = block.timestamp;
     }
 
     // claim rewards
@@ -182,6 +181,19 @@ contract RingFarm is Ownable {
     // unpauseStaking
     function unpauseStaking() public onlyOwner {
         require(stakingPaused, "Staking is currently unpaused");
+        lastTimeStamp = block.timestamp;
         stakingPaused = false;
+    }
+
+    function getTotalStaked() public view returns (uint256){
+        return totalStaked;
+    }
+
+    function getTotalPendingRewards() public view returns (uint256){
+        return totalPendingRewards;
+    }
+
+    function getStakersInfo(address staker) public view onlyOwner returns (stakingInfo memory){
+        return stakingDetails[staker];
     }
 }
