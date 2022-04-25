@@ -2,7 +2,7 @@ pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
-import "@openzeppelin/contracts/token/erc20/erc20.sol";
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 contract Ring is ERC20 {
     constructor() ERC20("OneRing","RING"){
