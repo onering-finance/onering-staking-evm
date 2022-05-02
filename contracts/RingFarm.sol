@@ -35,8 +35,7 @@ contract RingFarm is Ownable {
     uint256 totalStaked; // total amount of staked tokens
     uint256 rewardsBalance; // total amount of reward tokens
     uint256 public totalClaimed; // total amount of claimed rewards
-    uint256 totalPendingRewards; // total amount of rewards to be distributed
-    uint256 withdrawDuration = 2 weeks; // Amount of time to wait after requesting a withdrawal,
+    uint256 withdrawDuration = 90 days; // Amount of time to wait after requesting a withdrawal,
     uint256 private rewardsPerDay; // rewards per day
     uint256 public lastSystemTimeStamp; // last timestamp on which rewards were updated
     address[] public stakers; // array of stakers addresses used to iterate over map
@@ -53,7 +52,6 @@ contract RingFarm is Ownable {
     // WithdrawRewards
     function WithdrawRewards(uint256 amount) public onlyOwner {
         require(amount > 0, "Amount cannot be 0");
-        require(amount < rewardsBalance - totalPendingRewards, "Cannot leave less than you have to reward");
         IERC20(rewardToken).transferFrom(address(this), msg.sender, amount);
         rewardsBalance -= amount;
     }
@@ -70,7 +68,7 @@ contract RingFarm is Ownable {
             stakingDetails[msg.sender].stakerMarked = true;
         }
         else {
-            stakingDetails[msg.sender].stakingRewards += rewardsOfUserAtTime(msg.sender, block.timestamp); // make sur to update rewards before updating user's last timeStamp
+            stakingDetails[msg.sender].stakingRewards += rewardsOfUserAtTime(msg.sender, block.timestamp); // updates rewards before updating user's last timeStamp
         }
         stakingDetails[msg.sender].lastUserTimeStamp = block.timestamp;
         stakingDetails[msg.sender].stakingBalance += amount;
@@ -103,9 +101,9 @@ contract RingFarm is Ownable {
         require(stakingDetails[msg.sender].withdrawRequested, "A withdrawal is already requested");
         require(block.timestamp > stakingDetails[msg.sender].withdrawReleaseDate, "You cannot withdraw yet");
         if(andClaim){
-            claimRewards(amount);
+            claimRewards(stakingDetails[msg.sender].stakingRewards);
         }
-        require(IERC20(allowedToken).transferFrom(address(this), msg.sender, amount));
+        require(IERC20(allowedToken).transfer(msg.sender, amount));
         stakingDetails[msg.sender].stakingBalance -= amount;
         totalStaked -= amount;
         stakingDetails[msg.sender].withdrawRequested = false;
@@ -154,9 +152,8 @@ contract RingFarm is Ownable {
         require(stakingDetails[msg.sender].stakingRewards > 0, "User must have pending rewards"); // require that the caller has rewards
         require(amount <= stakingDetails[msg.sender].stakingRewards, "Cannot withdraw more than pending rewards");
         require(amount <= rewardsBalance, "Cannot withdraw more than the total rewards balance");
-        IERC20(rewardToken).transferFrom(address(this), msg.sender, amount);
+        IERC20(rewardToken).transfer(msg.sender, amount);
         rewardsBalance -= amount;
-        totalPendingRewards -= amount;
         totalClaimed += amount;
     }
 
@@ -195,10 +192,6 @@ contract RingFarm is Ownable {
 
     function getTotalStaked() public view returns (uint256){
         return totalStaked;
-    }
-
-    function getTotalPendingRewards() public view returns (uint256){
-        return totalPendingRewards;
     }
 
     function getStakersInfo(address staker) public view onlyOwner returns (stakingInfo memory){
