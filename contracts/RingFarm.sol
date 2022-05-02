@@ -4,6 +4,8 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
+import "hardhat/console.sol"; //debugging purposes
+
 contract Ring is ERC20 {
     constructor() ERC20("OneRing","RING"){
         _mint(msg.sender, 1000000000000);
@@ -15,6 +17,7 @@ contract Ring is ERC20 {
 struct stakingInfo {
         uint256 stakingBalance;  // total amount staked by user
         uint256 stakingRewards; // total pending rewards of user
+        uint256 lastUserTimeStamp; // last timestamp on which the user's rewards were updated
         uint256 amountToWithdraw; // amount requested to withdraw
         uint256 withdrawReleaseDate;  // release date of the requested withdraw
         bool stakerMarked; // marks if staker was added in stakers array, to avoid adding twice
@@ -23,6 +26,7 @@ struct stakingInfo {
 
 
 contract RingFarm is Ownable {
+    event updatedUserRewards(address userAddress, uint256 userRewards);
     address allowedToken; // token address that is allowed to be staked
     address rewardToken; // token address that is distributed in rewards
     bool stakingPaused = true; // bool marking whether staking is paused or not
@@ -34,7 +38,7 @@ contract RingFarm is Ownable {
     uint256 totalPendingRewards; // total amount of rewards to be distributed
     uint256 withdrawDuration = 2 weeks; // Amount of time to wait after requesting a withdrawal,
     uint256 private rewardsPerDay; // rewards per day
-    uint256 public lastTimeStamp; // last timestamp on which rewards were updated
+    uint256 public lastSystemTimeStamp; // last timestamp on which rewards were updated
     address[] public stakers; // array of stakers addresses used to iterate over map
     // owner -> balance
     mapping(address => stakingInfo) stakingDetails;  // map containing the details of each user (check the struct)
@@ -65,9 +69,14 @@ contract RingFarm is Ownable {
             stakers.push(msg.sender);
             stakingDetails[msg.sender].stakerMarked = true;
         }
+        else {
+            stakingDetails[msg.sender].stakingRewards += rewardsOfUserAtTime(msg.sender, block.timestamp); // make sur to update rewards before updating user's last timeStamp
+        }
+        stakingDetails[msg.sender].lastUserTimeStamp = block.timestamp;
         stakingDetails[msg.sender].stakingBalance += amount;
         totalStaked += amount;
     }
+
 
     // withdraw or unstake Tokens
     function withdrawTokens(uint256 amount) public{
@@ -125,19 +134,18 @@ contract RingFarm is Ownable {
         withdrawDuration = timeToWaitInDays * 24 * 60 * 60;
     }
 
-    // calculate rewards
-    //TO DO: Call this function at every block
-    function calculateRewards() public onlyOwner {
-        address stakerAddress;
-        uint256 rewardsToAdd;
-        for (uint i=0; i<stakers.length; i++) {
-            stakerAddress = stakers[i];
-            //staking rewards of each user is increased by the staker's share x rewards per day x seconds passed since last update divided by seconds per day.
-            rewardsToAdd = stakingDetails[stakerAddress].stakingBalance * rewardsPerDay * (block.timestamp - lastTimeStamp)/(86400 * totalStaked);
-            stakingDetails[stakerAddress].stakingRewards += rewardsToAdd;
-            totalPendingRewards += rewardsToAdd;
-        }
-        lastTimeStamp = block.timestamp;
+    // calculate user's rewards at timestamp
+    function rewardsOfUserAtTime(address stakerAddress, uint256 time) private view onlyOwner returns (uint256){
+        uint256 userRewards;
+        userRewards = stakingDetails[stakerAddress].stakingBalance * rewardsPerDay * (time - stakingDetails[stakerAddress].lastUserTimeStamp)/(86400 * totalStaked);
+        return userRewards;
+    }
+
+    // calculate user's rewards
+    function rewardsOfUser(address stakerAddress) public onlyOwner{
+        stakingDetails[stakerAddress].stakingRewards += rewardsOfUserAtTime(stakerAddress, block.timestamp);
+        stakingDetails[stakerAddress].lastUserTimeStamp = block.timestamp;
+        emit updatedUserRewards(msg.sender, stakingDetails[stakerAddress].stakingRewards);
     }
 
     // claim rewards
@@ -181,7 +189,7 @@ contract RingFarm is Ownable {
     // unpauseStaking
     function unpauseStaking() public onlyOwner {
         require(stakingPaused, "Staking is currently unpaused");
-        lastTimeStamp = block.timestamp;
+        lastSystemTimeStamp = block.timestamp;
         stakingPaused = false;
     }
 

@@ -97,14 +97,14 @@ describe("Greeter", async function () {
     // increase time by 2 hours
     await ethers.provider.send('evm_increaseTime', [7200]);
     await ethers.provider.send('evm_mine');
-    await stakingContract.calculateRewards();
-    expect((await stakingContract.getStakersInfo(staker1.address)).stakingRewards).to.equal(ethers.BigNumber.from(83));
+    await stakingContract.rewardsOfUser(staker1.address);
+    expect((await stakingContract.getStakersInfo(staker1.address)).stakingRewards).to.equal(83);
 
     // increase time by 10 hours
     await ethers.provider.send('evm_increaseTime', [36000]);
     await ethers.provider.send('evm_mine');
-    await stakingContract.calculateRewards();
-    expect((await stakingContract.getStakersInfo(staker1.address)).stakingRewards).to.equal(ethers.BigNumber.from(499));
+    await stakingContract.rewardsOfUser(staker1.address);
+    expect((await stakingContract.getStakersInfo(staker1.address)).stakingRewards).to.equal(499);
 });
 
 it("Staker2 joins", async function () {
@@ -123,7 +123,8 @@ it("Staker2 joins", async function () {
   // increase time by 12 hours
   await ethers.provider.send('evm_increaseTime', [43200]);
   await ethers.provider.send('evm_mine');
-  await stakingContract.calculateRewards();
+  await stakingContract.rewardsOfUser(staker1.address);
+  await stakingContract.rewardsOfUser(staker2.address);
 
   expect((await stakingContract.getStakersInfo(staker2.address)).stakingRewards).to.equal(ethers.BigNumber.from(250));
   expect((await stakingContract.getStakersInfo(staker1.address)).stakingRewards).to.equal(ethers.BigNumber.from(749));
