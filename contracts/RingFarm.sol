@@ -5,7 +5,6 @@ import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
-import "hardhat/console.sol";
 
 contract Ring is ERC20 {
     constructor() ERC20("OneRing","RING"){
@@ -59,7 +58,6 @@ contract RingFarm is Ownable {
     function updateSnapshot() private{
         require(totalStaked > 0, "Must have tokens being staked");
         snapshot = updatedSnapshotValue();
-        console.log("SNAPSHOT after ",snapshot);
         lastSnapshotTimestamp = block.timestamp;
     }
 
@@ -68,7 +66,7 @@ contract RingFarm is Ownable {
     }
 
     function updatedSnapshotValue() private view returns (uint256){
-        return accumulatedSnapshotValue((rewardsPerDay * 10e18 * (block.timestamp - lastSnapshotTimestamp)) /  (86400 * totalStaked));
+        return accumulatedSnapshotValue((rewardsPerDay * 1e18 * (block.timestamp - lastSnapshotTimestamp)) /  (86400 * totalStaked));
     }
 
     // stakeTokens
@@ -82,8 +80,10 @@ contract RingFarm is Ownable {
             lastSnapshotTimestamp = block.timestamp;
         }
         //check if staker already in array
+        else{
+            updateSnapshot();
+        }
         totalStaked += amount;
-        updateSnapshot();
         if(!stakingDetails[msg.sender].stakerMarked){
             stakers.push(msg.sender);
             stakingDetails[msg.sender].userStakingRewards = snapshot;
@@ -174,7 +174,6 @@ contract RingFarm is Ownable {
     }
 
     function getUserRewards(address stakerAddress) public view onlyOwner returns (uint256){
-        console.log(updatedSnapshotValue());
         return stakingDetails[stakerAddress].stakingBalance * (updatedSnapshotValue() - stakingDetails[stakerAddress].userStakingRewards);
     }
 

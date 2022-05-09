@@ -95,11 +95,11 @@ describe("Greeter", async function () {
     // increase time by 2 hours
     await ethers.provider.send('evm_increaseTime', [7200]);
     await ethers.provider.send('evm_mine');
-    expect(await stakingContract.getUserRewards(staker1.address)).to.equal("833449074074074074000");
+    expect(await stakingContract.getUserRewards(staker1.address)).to.equal("83344907407407407400");
     // increase time by 10 hours
     await ethers.provider.send('evm_increaseTime', [36000]);
     await ethers.provider.send('evm_mine');
-    expect(await stakingContract.getUserRewards(staker1.address)).to.equal("5000115740740740740600");
+    expect(await stakingContract.getUserRewards(staker1.address)).to.equal("500011574074074074000");
 });
 
 it("Staker2 joins", async function () {
@@ -118,25 +118,24 @@ it("Staker2 joins", async function () {
   await ethers.provider.send('evm_increaseTime', [43200]);
   await ethers.provider.send('evm_mine');
 
-  expect(await stakingContract.getUserRewards(staker2.address)).to.equal("2500000000000000000000");
+  expect(await stakingContract.getUserRewards(staker2.address)).to.equal("250000000000000000000");
 
-  expect(await stakingContract.getUserRewards(staker1.address)).to.equal("749");
+  expect(await stakingContract.getUserRewards(staker1.address)).to.equal("750046296296296296200");
 });
 
 it("Stakers claims rewards", async function () {
 
   let staker1Balance = await rewardToken.balanceOf(staker1.address);
   await stakingContract.getUserRewards(staker1.address);
-  let rewardsToClaim = await stakingContract.getUserRewards(staker1.address);
+  let rewardsToClaim = (await stakingContract.getUserRewards(staker1.address)).div(ethers.utils.parseEther('1'));
   await stakingContract.connect(staker1).claimRewards(rewardsToClaim);
   expect(await rewardToken.balanceOf(staker1.address)).to.equal(staker1Balance.add(rewardsToClaim));
 
   // Staker2 withdraw with wrong amount, expect revert
   let staker2Balance = await rewardToken.balanceOf(staker2.address);
   await stakingContract.getUserRewards(staker2.address);
-  let rewards2ToClaim = (await stakingContract.getStakersInfo(staker2.address)).stakingRewards;
-  await expect (stakingContract.connect(staker2).claimRewards(rewardsToClaim)).to.be.revertedWith('Cannot withdraw more than pending rewards');
-
+  let rewards2ToClaim = (await stakingContract.getUserRewards(staker2.address)).div(ethers.utils.parseEther('1'));
+  await expect (stakingContract.connect(staker2).claimRewards(rewardsToClaim)).to.be.revertedWith('Cannot withdraw more than the total rewards balance');
   await stakingContract.connect(staker2).claimRewards(rewards2ToClaim);
   expect(await rewardToken.balanceOf(staker2.address)).to.equal(staker2Balance.add(rewards2ToClaim));
 
