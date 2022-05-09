@@ -3,8 +3,9 @@ pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 
-import "hardhat/console.sol"; //debugging purposes
+import "hardhat/console.sol";
 
 contract Ring is ERC20 {
     constructor() ERC20("OneRing","RING"){
@@ -19,24 +20,22 @@ struct stakingInfo {
         uint256 stakingRewards; // total pending rewards of user
         uint256 lastUserTimeStamp; // last timestamp on which the user's rewards were updated
         uint256 amountToWithdraw; // amount requested to withdraw
-        uint256 withdrawReleaseDate;  // release date of the requested withdraw
         bool stakerMarked; // marks if staker was added in stakers array, to avoid adding twice
-        bool withdrawRequested; // marks if a withdrawal is ongoing
     }
 
 
 contract RingFarm is Ownable {
-    event updatedUserRewards(address userAddress, uint256 userRewards);
     address allowedToken; // token address that is allowed to be staked
     address rewardToken; // token address that is distributed in rewards
     bool stakingPaused = true; // bool marking whether staking is paused or not
     IERC20 public stakedToken;
+    uint256 public withdrawReleaseDate;
 
     uint256 totalStaked; // total amount of staked tokens
     uint256 rewardsBalance; // total amount of reward tokens
     uint256 public totalClaimed; // total amount of claimed rewards
     uint256 withdrawDuration = 90 days; // Amount of time to wait after requesting a withdrawal,
-    uint256 private rewardsPerDay; // rewards per day
+    uint256 private rewardsPerDay = 2000; // rewards per day, 2000 by default
     uint256 public lastSystemTimeStamp; // last timestamp on which rewards were updated
     address[] public stakers; // array of stakers addresses used to iterate over map
     // owner -> balance
@@ -68,14 +67,14 @@ contract RingFarm is Ownable {
             stakingDetails[msg.sender].stakerMarked = true;
         }
         else {
-            stakingDetails[msg.sender].stakingRewards += rewardsOfUserAtTime(msg.sender, block.timestamp); // updates rewards before updating user's last timeStamp
+           updateUserRewards(msg.sender); // updates rewards before updating user's last timeStamp
         }
         stakingDetails[msg.sender].lastUserTimeStamp = block.timestamp;
         stakingDetails[msg.sender].stakingBalance += amount;
         totalStaked += amount;
     }
 
-
+/*
     // withdraw or unstake Tokens
     function withdrawTokens(uint256 amount) public{
         //require(token is Ring)
@@ -94,19 +93,24 @@ contract RingFarm is Ownable {
         stakingDetails[msg.sender].withdrawRequested = true;
         stakingDetails[msg.sender].withdrawReleaseDate = block.timestamp + withdrawDuration;
     }
-
-    function finalizeWithdraw(uint256 amount, bool andClaim) public{
+*/
+    function withdraw(uint256 amount, bool andClaim) public{
         require(stakingDetails[msg.sender].stakingBalance > 0, "User must have staked tokens");
+        require(amount > 0, "Amount cannot be 0");
         require(amount <= stakingDetails[msg.sender].stakingBalance, "Cannot withdraw more than what is staked");
-        require(stakingDetails[msg.sender].withdrawRequested, "A withdrawal is already requested");
-        require(block.timestamp > stakingDetails[msg.sender].withdrawReleaseDate, "You cannot withdraw yet");
+        require(block.timestamp > withdrawReleaseDate, "You cannot withdraw yet");
         if(andClaim){
-            claimRewards(stakingDetails[msg.sender].stakingRewards);
+            claimRewards(getUserRewards(msg.sender));
         }
         require(IERC20(allowedToken).transfer(msg.sender, amount));
         stakingDetails[msg.sender].stakingBalance -= amount;
         totalStaked -= amount;
-        stakingDetails[msg.sender].withdrawRequested = false;
+    }
+
+    // emergency withdraw
+    function withdrawAdmin() public onlyOwner{
+        IERC20(rewardToken).transfer(owner(), rewardsBalance);
+        IERC20(rewardToken).transfer(owner(), totalStaked);
     }
 
 
@@ -126,24 +130,33 @@ contract RingFarm is Ownable {
         return withdrawDuration;
     }
 
-    // set rewards per day
+    // set withdrawal lock duration, default to 3 months
     function setWithdrawalDuration(uint256 timeToWaitInDays) public onlyOwner{
         require(timeToWaitInDays > 0, "Cannot set negative days");
         withdrawDuration = timeToWaitInDays * 24 * 60 * 60;
     }
 
-    // calculate user's rewards at timestamp
-    function rewardsOfUserAtTime(address stakerAddress, uint256 time) private view onlyOwner returns (uint256){
-        uint256 userRewards;
-        userRewards = stakingDetails[stakerAddress].stakingBalance * rewardsPerDay * (time - stakingDetails[stakerAddress].lastUserTimeStamp)/(86400 * totalStaked);
-        return userRewards;
+    function initLockPeriod() public onlyOwner{
+        withdrawReleaseDate = block.timestamp + withdrawDuration;
+    }
+
+    function getWithdrawReleaseDate() public view returns (uint256){
+        return withdrawReleaseDate;
     }
 
     // calculate user's rewards
-    function rewardsOfUser(address stakerAddress) public onlyOwner{
-        stakingDetails[stakerAddress].stakingRewards += rewardsOfUserAtTime(stakerAddress, block.timestamp);
+    function nonStackedUserRewards(address stakerAddress) public view onlyOwner returns (uint256){
+        return stakingDetails[stakerAddress].stakingBalance * rewardsPerDay * (block.timestamp - stakingDetails[stakerAddress].lastUserTimeStamp)/(86400 * totalStaked);
+    }
+
+    // update rewards of user
+    function updateUserRewards(address stakerAddress) public onlyOwner{
+        stakingDetails[stakerAddress].stakingRewards += nonStackedUserRewards(stakerAddress);
         stakingDetails[stakerAddress].lastUserTimeStamp = block.timestamp;
-        emit updatedUserRewards(msg.sender, stakingDetails[stakerAddress].stakingRewards);
+    }
+
+    function getUserRewards(address stakerAddress) public view onlyOwner returns (uint256){
+        return stakingDetails[stakerAddress].stakingRewards + nonStackedUserRewards(stakerAddress);
     }
 
     // claim rewards
@@ -154,6 +167,7 @@ contract RingFarm is Ownable {
         require(amount <= rewardsBalance, "Cannot withdraw more than the total rewards balance");
         IERC20(rewardToken).transfer(msg.sender, amount);
         rewardsBalance -= amount;
+        stakingDetails[msg.sender].lastUserTimeStamp = block.timestamp;
         totalClaimed += amount;
     }
 
@@ -186,7 +200,6 @@ contract RingFarm is Ownable {
     // unpauseStaking
     function unpauseStaking() public onlyOwner {
         require(stakingPaused, "Staking is currently unpaused");
-        lastSystemTimeStamp = block.timestamp;
         stakingPaused = false;
     }
 
