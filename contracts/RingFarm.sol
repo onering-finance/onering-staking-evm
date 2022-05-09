@@ -9,7 +9,7 @@ import "hardhat/console.sol";
 
 contract Ring is ERC20 {
     constructor() ERC20("OneRing","RING"){
-        _mint(msg.sender, 1000000000000);
+        _mint(msg.sender, 1000000000000e18);
     }
 }
 
@@ -17,7 +17,7 @@ contract Ring is ERC20 {
 
 struct stakingInfo {
         uint256 stakingBalance;  // total amount staked by user
-        uint256 stakingRewards; // total pending rewards of user
+        uint256 userStakingRewards; // last staking rewards snapshot
         uint256 lastUserTimeStamp; // last timestamp on which the user's rewards were updated
         uint256 amountToWithdraw; // amount requested to withdraw
         bool stakerMarked; // marks if staker was added in stakers array, to avoid adding twice
@@ -36,7 +36,8 @@ contract RingFarm is Ownable {
     uint256 public totalClaimed; // total amount of claimed rewards
     uint256 withdrawDuration = 90 days; // Amount of time to wait after requesting a withdrawal,
     uint256 private rewardsPerDay = 2000; // rewards per day, 2000 by default
-    uint256 public lastSystemTimeStamp; // last timestamp on which rewards were updated
+    uint256 public snapshot; // rewards snapshot at distribution
+    uint256 private lastSnapshotTimestamp; // snapshot's timestamp
     address[] public stakers; // array of stakers addresses used to iterate over map
     // owner -> balance
     mapping(address => stakingInfo) stakingDetails;  // map containing the details of each user (check the struct)
@@ -51,8 +52,23 @@ contract RingFarm is Ownable {
     // WithdrawRewards
     function WithdrawRewards(uint256 amount) public onlyOwner {
         require(amount > 0, "Amount cannot be 0");
-        IERC20(rewardToken).transferFrom(address(this), msg.sender, amount);
+        IERC20(rewardToken).transfer(msg.sender, amount);
         rewardsBalance -= amount;
+    }
+
+    function updateSnapshot() private{
+        require(totalStaked > 0, "Must have tokens being staked");
+        snapshot = updatedSnapshotValue();
+        console.log("SNAPSHOT after ",snapshot);
+        lastSnapshotTimestamp = block.timestamp;
+    }
+
+    function accumulatedSnapshotValue(uint256 currentReward) private view returns (uint256){
+        return snapshot + currentReward;
+    }
+
+    function updatedSnapshotValue() private view returns (uint256){
+        return accumulatedSnapshotValue((rewardsPerDay * 10e18 * (block.timestamp - lastSnapshotTimestamp)) /  (86400 * totalStaked));
     }
 
     // stakeTokens
@@ -61,17 +77,28 @@ contract RingFarm is Ownable {
         require(!stakingPaused, "Staking is currently paused");
         require(amount > 0, "Amount cannot be 0");
         IERC20(allowedToken).transferFrom(msg.sender, address(this), amount);
+        //check if first staker:
+        if(totalStaked == 0){
+            lastSnapshotTimestamp = block.timestamp;
+        }
         //check if staker already in array
+        totalStaked += amount;
+        updateSnapshot();
         if(!stakingDetails[msg.sender].stakerMarked){
             stakers.push(msg.sender);
+            stakingDetails[msg.sender].userStakingRewards = snapshot;
             stakingDetails[msg.sender].stakerMarked = true;
+            stakingDetails[msg.sender].lastUserTimeStamp = block.timestamp;
         }
         else {
-           updateUserRewards(msg.sender); // updates rewards before updating user's last timeStamp
+            reStakeTokens(amount); // updates rewards before updating user's last timeStamp
         }
-        stakingDetails[msg.sender].lastUserTimeStamp = block.timestamp;
         stakingDetails[msg.sender].stakingBalance += amount;
-        totalStaked += amount;
+
+    }
+
+    function reStakeTokens(uint256 amount) public{
+        
     }
 
 /*
@@ -99,12 +126,14 @@ contract RingFarm is Ownable {
         require(amount > 0, "Amount cannot be 0");
         require(amount <= stakingDetails[msg.sender].stakingBalance, "Cannot withdraw more than what is staked");
         require(block.timestamp > withdrawReleaseDate, "You cannot withdraw yet");
+        updateSnapshot();
         if(andClaim){
             claimRewards(getUserRewards(msg.sender));
         }
         require(IERC20(allowedToken).transfer(msg.sender, amount));
         stakingDetails[msg.sender].stakingBalance -= amount;
         totalStaked -= amount;
+        updateSnapshot();
     }
 
     // emergency withdraw
@@ -144,30 +173,18 @@ contract RingFarm is Ownable {
         return withdrawReleaseDate;
     }
 
-    // calculate user's rewards
-    function nonStackedUserRewards(address stakerAddress) public view onlyOwner returns (uint256){
-        return stakingDetails[stakerAddress].stakingBalance * rewardsPerDay * (block.timestamp - stakingDetails[stakerAddress].lastUserTimeStamp)/(86400 * totalStaked);
-    }
-
-    // update rewards of user
-    function updateUserRewards(address stakerAddress) public onlyOwner{
-        stakingDetails[stakerAddress].stakingRewards += nonStackedUserRewards(stakerAddress);
-        stakingDetails[stakerAddress].lastUserTimeStamp = block.timestamp;
-    }
-
     function getUserRewards(address stakerAddress) public view onlyOwner returns (uint256){
-        return stakingDetails[stakerAddress].stakingRewards + nonStackedUserRewards(stakerAddress);
+        console.log(updatedSnapshotValue());
+        return stakingDetails[stakerAddress].stakingBalance * (updatedSnapshotValue() - stakingDetails[stakerAddress].userStakingRewards);
     }
 
     // claim rewards
     function claimRewards(uint256 amount) public {
         require(stakingDetails[msg.sender].stakerMarked, "User must be marked as a staker"); // require that the caller is a staker
-        require(stakingDetails[msg.sender].stakingRewards > 0, "User must have pending rewards"); // require that the caller has rewards
-        require(amount <= stakingDetails[msg.sender].stakingRewards, "Cannot withdraw more than pending rewards");
         require(amount <= rewardsBalance, "Cannot withdraw more than the total rewards balance");
         IERC20(rewardToken).transfer(msg.sender, amount);
         rewardsBalance -= amount;
-        stakingDetails[msg.sender].lastUserTimeStamp = block.timestamp;
+        updateSnapshot();
         totalClaimed += amount;
     }
 
