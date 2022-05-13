@@ -20,7 +20,7 @@ describe("Greeter", async function () {
 
   it("Make sure deployment is ok", async function () {
     [owner, staker1, staker2] = await ethers.getSigners(); // 3 addresses
-    RewardFactory = await ethers.getContractFactory("Ring");
+    RewardFactory = await ethers.getContractFactory("contracts/Ring.sol:Ring");
     rewardToken = await RewardFactory.deploy();
     const ownerBalance = await rewardToken.balanceOf(owner.address);
     expect(await rewardToken.totalSupply()).to.equal(ownerBalance);
@@ -32,7 +32,7 @@ describe("Greeter", async function () {
     await rewardToken.connect(staker1).transfer(rewardToken.address, 25); // .connect(signer) is used to send a tx from another account
     expect(await rewardToken.balanceOf(staker1.address)).to.equal(25);
 
-    StakingFactory = await ethers.getContractFactory("RingFarm"); // smart contract deployer
+    StakingFactory = await ethers.getContractFactory("contracts/RingFarmFlattened.sol:RingFarm"); // smart contract deployer
     stakingContract = await StakingFactory.deploy(); // object having all smart contract functions
     await stakingContract.deployed();
 

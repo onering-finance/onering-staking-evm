@@ -1,15 +1,5 @@
 require("@nomiclabs/hardhat-waffle");
-
-// This is a sample Hardhat task. To learn how to create your own go to
-// https://hardhat.org/guides/create-task.html
-task("accounts", "Prints the list of accounts", async (taskArgs, hre) => {
-  const accounts = await hre.ethers.getSigners();
-
-  for (const account of accounts) {
-    console.log(account.address);
-  }
-});
-
+require("@nomiclabs/hardhat-etherscan");
 // You need to export an object to set up your config
 // Go to https://hardhat.org/config/ to learn more
 
@@ -18,4 +8,17 @@ task("accounts", "Prints the list of accounts", async (taskArgs, hre) => {
  */
 module.exports = {
   solidity: "0.8.4",
+  networks: {
+    fantomtest: {
+      url: "https://rpc.testnet.fantom.network",
+      accounts: ["1e4ef429ba950c2d110eb073929927a7c90a4260baed308480352e02a9ef04ca"],
+      chainId: 4002,
+      // live: false,
+      // saveDeployments: true,
+      // gasMultiplier: 2,
+    },
+  },
+  etherscan:{
+    apiKey: "RXW8JEDX1ZAA1796387AIQQI484D8CKWT7"
+  }
 };
