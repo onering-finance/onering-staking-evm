@@ -5,13 +5,12 @@ import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
-
-
 contract RingFarm is Ownable {
 
     struct stakingInfo {
         uint256 stakingBalance;  // total amount staked by user
-        uint256 userStakingRewards; // last staking rewards snapshot
+        uint256 userStakingSnapshot; // last staking rewards snapshot
+        uint256 userStakingRewards; // last staking rewards
         uint256 lastUserTimeStamp; // last timestamp on which the user's rewards were updated
         uint256 amountToWithdraw; // amount requested to withdraw
         bool stakerMarked; // marks if staker was added in stakers array, to avoid adding twice
@@ -27,9 +26,9 @@ contract RingFarm is Ownable {
     uint256 rewardsBalance; // total amount of reward tokens
     uint256 public totalClaimed; // total amount of claimed rewards
     uint256 withdrawDuration = 90 days; // Amount of time to wait after requesting a withdrawal,
-    uint256 private rewardsPerDay = 2000*1e18; // rewards per day, 2000 by default
+    uint256 public rewardsPerDay = 2000*1e18; // rewards per day, 2000 by default
     uint256 public snapshot; // rewards snapshot at distribution
-    uint256 private lastSnapshotTimestamp; // snapshot's timestamp
+    uint256 public lastSnapshotTimestamp; // snapshot's timestamp
     address[] public stakers; // array of stakers addresses used to iterate over map
     // owner -> balance
     mapping(address => stakingInfo) stakingDetails;  // map containing the details of each user (check the struct)
@@ -59,7 +58,7 @@ contract RingFarm is Ownable {
     }
 
     function updatedSnapshotValue() private view returns (uint256){
-        return accumulatedSnapshotValue((rewardsPerDay * (block.timestamp - lastSnapshotTimestamp)) /  (86400 * totalStaked));
+        return accumulatedSnapshotValue((rewardsPerDay * 1e18 * (block.timestamp - lastSnapshotTimestamp)) /  (86400 * totalStaked));
     }
 
     // stakeTokens
@@ -68,16 +67,20 @@ contract RingFarm is Ownable {
         require(!stakingPaused, "Staking is currently paused");
         require(amount > 0, "Amount cannot be 0");
         IERC20(allowedToken).transferFrom(msg.sender, address(this), amount);
-        //check if first staker:
+        //check if person is staking more or for the first time
+        if(stakingDetails[msg.sender].stakerMarked){
+            stakingDetails[msg.sender].userStakingRewards = getUserRewards(msg.sender);
+        }
+        //check if first staker ever:
         if(totalStaked == 0){
             lastSnapshotTimestamp = block.timestamp;
         }
-        //check if staker already in array
         else{
             updateSnapshot();
         }
+
         totalStaked += amount;
-        stakingDetails[msg.sender].userStakingRewards = snapshot;
+        stakingDetails[msg.sender].userStakingSnapshot = snapshot;
         stakingDetails[msg.sender].lastUserTimeStamp = block.timestamp;
         if(!stakingDetails[msg.sender].stakerMarked){
             stakers.push(msg.sender);
@@ -94,7 +97,7 @@ contract RingFarm is Ownable {
         require(block.timestamp > withdrawReleaseDate, "You cannot withdraw yet");
         updateSnapshot();
         if(andClaim){
-            claimRewards(getUserRewards(msg.sender));
+            claimRewards(getUserRewards(msg.sender)/1e18);
         }
         require(IERC20(allowedToken).transfer(msg.sender, amount));
         stakingDetails[msg.sender].stakingBalance -= amount;
@@ -140,7 +143,11 @@ contract RingFarm is Ownable {
     }
 
     function getUserRewards(address stakerAddress) public view returns (uint256){
-        return stakingDetails[stakerAddress].stakingBalance * (updatedSnapshotValue() - stakingDetails[stakerAddress].userStakingRewards);
+        if(!stakingDetails[stakerAddress].stakerMarked){   
+            return 0;
+        }
+        return (stakingDetails[stakerAddress].userStakingRewards + 
+        (stakingDetails[stakerAddress].stakingBalance * (updatedSnapshotValue() - stakingDetails[stakerAddress].userStakingSnapshot)));
     }
 
     // claim rewards
@@ -150,7 +157,12 @@ contract RingFarm is Ownable {
         require(amount <= getUserRewards(msg.sender));
         IERC20(rewardToken).transfer(msg.sender, amount);
         rewardsBalance -= amount;
-        updateSnapshot();
+        if(amount > stakingDetails[msg.sender].userStakingRewards){
+            stakingDetails[msg.sender].userStakingRewards = 0;
+        }
+        else{
+            stakingDetails[msg.sender].userStakingRewards -= amount;
+        }
         totalClaimed += amount;
     }
 
