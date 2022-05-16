@@ -25,19 +25,19 @@ describe("Greeter", async function () {
     const ownerBalance = await rewardToken.balanceOf(owner.address);
     expect(await rewardToken.totalSupply()).to.equal(ownerBalance);
 
-    await rewardToken.transfer(staker1.address, 50); // transfer 50 tokens to addr1
-    expect(await rewardToken.balanceOf(staker1.address)).to.equal(50);
+    await rewardToken.transfer(staker1.address, '50000000000000000000'); // transfer 50 tokens to addr1
+    expect(await rewardToken.balanceOf(staker1.address)).to.equal('50000000000000000000');
 
 
-    await rewardToken.connect(staker1).transfer(rewardToken.address, 25); // .connect(signer) is used to send a tx from another account
-    expect(await rewardToken.balanceOf(staker1.address)).to.equal(25);
+    await rewardToken.connect(staker1).transfer(rewardToken.address, '25000000000000000000'); // .connect(signer) is used to send a tx from another account
+    expect(await rewardToken.balanceOf(staker1.address)).to.equal('25000000000000000000');
 
     StakingFactory = await ethers.getContractFactory("contracts/RingFarm.sol:RingFarm"); // smart contract deployer
     stakingContract = await StakingFactory.deploy(); // object having all smart contract functions
     await stakingContract.deployed();
 
-    await await rewardToken.connect(staker1).transfer(stakingContract.address, 25);
-    expect(await rewardToken.balanceOf(stakingContract.address)).to.equal(25);
+    await await rewardToken.connect(staker1).transfer(stakingContract.address, '25000000000000000000');
+    expect(await rewardToken.balanceOf(stakingContract.address)).to.equal('25000000000000000000');
   });
 
 
@@ -46,14 +46,14 @@ describe("Greeter", async function () {
     await stakingContract.changeAllowedToken(rewardToken.address);
     await stakingContract.changeRewardToken(rewardToken.address);
   
-    expect(await rewardToken.balanceOf(stakingContract.address)).to.equal(25);
+    expect(await rewardToken.balanceOf(stakingContract.address)).to.equal('25000000000000000000');
 
     // Approve staking contract
-    await rewardToken.approve(stakingContract.address, 1200);
-    await stakingContract.addRewards(1200);
+    await rewardToken.approve(stakingContract.address, '1200000000000000000000');
+    await stakingContract.addRewards('1200000000000000000000');
 
     // Expect reward to have increased
-    expect(await rewardToken.balanceOf(stakingContract.address)).to.equal(1225);
+    expect(await rewardToken.balanceOf(stakingContract.address)).to.equal('1225000000000000000000');
 
     expect(await stakingContract.getAllowedToken()).to.equal(rewardToken.address);
   });
@@ -62,8 +62,8 @@ describe("Greeter", async function () {
   it("Test staking pause / unpause", async function () {
     
     // Give 1000 tokens for staker1
-    await rewardToken.transfer(staker1.address, 1000);
-    await rewardToken.connect(staker1).approve(stakingContract.address, 400);
+    await rewardToken.transfer(staker1.address, '1000000000000000000000');
+    await rewardToken.connect(staker1).approve(stakingContract.address, '400000000000000000000');
     await expect(stakingContract.connect(staker1).stakeTokens(200)).to.be.revertedWith('Staking is currently paused');
 
 
@@ -78,16 +78,16 @@ describe("Greeter", async function () {
 
     // pause staking
     await stakingContract.pauseStaking();
-    await expect(stakingContract.connect(staker1).stakeTokens(200)).to.be.revertedWith('Staking is currently paused');
+    await expect(stakingContract.connect(staker1).stakeTokens('200000000000000000000')).to.be.revertedWith('Staking is currently paused');
   });
 
   it("Test staking", async function () {
     // unpause staking
     await stakingContract.unpauseStaking();
-    await stakingContract.connect(staker1).stakeTokens(200);
-    await stakingContract.setRewardsPerDay(1000);
-    expect((await stakingContract.getStakersInfo(staker1.address)).stakingBalance).to.equal(200);
-    expect(await stakingContract.getTotalStaked()).to.equal(200);
+    await stakingContract.connect(staker1).stakeTokens('200000000000000000000');
+    await stakingContract.setRewardsPerDay('1000000000000000000000');
+    expect((await stakingContract.getStakersInfo(staker1.address)).stakingBalance).to.equal('200000000000000000000');
+    expect(await stakingContract.getTotalStaked()).to.equal('200000000000000000000');
 
     
     // User owns all the staking pool and checks rewards after 12 hours, should have 500 (1000 daily rewards / 2).
@@ -95,25 +95,27 @@ describe("Greeter", async function () {
     // increase time by 2 hours
     await ethers.provider.send('evm_increaseTime', [7200]);
     await ethers.provider.send('evm_mine');
-    expect(((await stakingContract.getUserRewards(staker1.address))/1e18).toFixed(4)).to.equal('83.3449');
+    expect(((await stakingContract.getUserRewards(staker1.address))/1e18)).to.equal(83344907407407420000);
 
+    // test claiming rewards
+    await stakingContract.connect(staker1).claimRewards('33000000000000000000');
     // test restaking
     await stakingContract.connect(staker1).stakeTokens(1);
 
     // increase time by 10 hours
     await ethers.provider.send('evm_increaseTime', [36000]);
     await ethers.provider.send('evm_mine');
-    expect(((await stakingContract.getUserRewards(staker1.address))/1e18).toFixed(4)).to.equal('500.0231');
+    expect(((await stakingContract.getUserRewards(staker1.address))/1e18)).to.equal(467034722222222200000);
 });
 
 it("Staker2 joins", async function () {
     
   // give staker2 500 tokens, stake them
-  await rewardToken.transfer(staker2.address, 500);
-  await rewardToken.connect(staker2).approve(stakingContract.address, 200);
-  await stakingContract.connect(staker2).stakeTokens(200);
-  expect((await stakingContract.getStakersInfo(staker2.address)).stakingBalance).to.equal(200);
-  expect(await stakingContract.getTotalStaked()).to.equal(401);
+  await rewardToken.transfer(staker2.address, '500000000000000000000');
+  await rewardToken.connect(staker2).approve(stakingContract.address, '200000000000000000000');
+  await stakingContract.connect(staker2).stakeTokens('200000000000000000000');
+  expect((await stakingContract.getStakersInfo(staker2.address)).stakingBalance).to.equal('200000000000000000000');
+  expect(await stakingContract.getTotalStaked()).to.equal('400000000000000000001');
   
   // User owns half the staking pool and checks rewards after 12 hours, should have 250 (500 remaining daily rewards / 2).
   // and staker 1 should have 750
@@ -122,9 +124,9 @@ it("Staker2 joins", async function () {
   await ethers.provider.send('evm_increaseTime', [43200]);
   await ethers.provider.send('evm_mine');
 
-  expect(((await stakingContract.getUserRewards(staker2.address))/1e18).toFixed(4)).to.equal('249.3766');
+  expect(((await stakingContract.getUserRewards(staker2.address))/1e18)).to.equal(250000000000000000000);
 
-  expect(((await stakingContract.getUserRewards(staker1.address))/1e18).toFixed(4)).to.equal("750.6813");
+  expect(((await stakingContract.getUserRewards(staker1.address))/1e18)).to.equal(717069444444444426240);
 });
 
 it("Stakers claims rewards", async function () {

@@ -5,6 +5,7 @@ import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
+
 contract RingFarm is Ownable {
 
     struct stakingInfo {
@@ -157,12 +158,9 @@ contract RingFarm is Ownable {
         require(amount <= getUserRewards(msg.sender));
         IERC20(rewardToken).transfer(msg.sender, amount);
         rewardsBalance -= amount;
-        if(amount > stakingDetails[msg.sender].userStakingRewards){
-            stakingDetails[msg.sender].userStakingRewards = 0;
-        }
-        else{
-            stakingDetails[msg.sender].userStakingRewards -= amount;
-        }
+        stakingDetails[msg.sender].userStakingRewards = getUserRewards(msg.sender) - amount*1e18;
+        updateSnapshot();
+        stakingDetails[msg.sender].userStakingSnapshot = snapshot;
         totalClaimed += amount;
     }
 
